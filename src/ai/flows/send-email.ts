@@ -1,6 +1,6 @@
 'use server';
 /**
- * @fileOverview An email sending flow using Resend.
+ * @fileOverview An email sending flow using Nodemailer and Gmail SMTP.
  *
  * - sendEmail - A function that sends an email.
  * - SendEmailInput - The input type for the sendEmail function.
@@ -8,7 +8,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
 const SendEmailInputSchema = z.object({
   to: z.string().email().describe('The recipient email address.'),
@@ -17,11 +17,18 @@ const SendEmailInputSchema = z.object({
 });
 export type SendEmailInput = z.infer<typeof SendEmailInputSchema>;
 
-let resend: Resend | null = null;
-if (process.env.RESEND_API_KEY) {
-  resend = new Resend(process.env.RESEND_API_KEY);
+let transporter: nodemailer.Transporter | null = null;
+
+if (process.env.GMAIL_EMAIL && process.env.GMAIL_APP_PASSWORD) {
+    transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: process.env.GMAIL_EMAIL,
+            pass: process.env.GMAIL_APP_PASSWORD,
+        },
+    });
 } else {
-  console.warn("RESEND_API_KEY is not set. Email functionality will be disabled.");
+  console.warn("GMAIL_EMAIL or GMAIL_APP_PASSWORD is not set. Email functionality will be disabled.");
 }
 
 export async function sendEmail(input: SendEmailInput): Promise<void> {
@@ -35,22 +42,27 @@ const sendEmailFlow = ai.defineFlow(
     outputSchema: z.void(),
   },
   async (input) => {
-    if (!resend) {
-        console.error("Email not sent: Resend is not configured. Please set RESEND_API_KEY.");
-        return;
+    if (!transporter) {
+        console.error("Email not sent: Nodemailer is not configured. Please set GMAIL_EMAIL and GMAIL_APP_PASSWORD in your .env file.");
+        // Optionally, throw an error to make the failure more explicit to the caller
+        throw new Error("Email service is not configured.");
     }
-    try {
-      await resend.emails.send({
-        from: 'NexusFlow <onboarding@resend.dev>',
+    
+    const mailOptions = {
+        from: `"Internal Dashboard" <${process.env.GMAIL_EMAIL}>`,
         to: input.to,
         subject: input.subject,
         html: input.html,
-      });
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
       console.log(`Email sent to ${input.to}`);
     } catch (error) {
       console.error('Failed to send email:', error);
       // In a real app, you might want to handle this error more gracefully
-      // For the prototype, we'll just log it.
+      // Re-throwing the error to let the caller know something went wrong.
+      throw new Error(`Failed to send email: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 );

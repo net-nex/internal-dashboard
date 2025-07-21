@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -202,8 +203,8 @@ export default function TaskDetailPage() {
       <div className="md:col-span-2 flex flex-col gap-8">
         <Card className="stagger-fade-in">
           <CardHeader>
-            <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-              <div>
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+              <div className="flex-1">
                 <div className="flex items-center flex-wrap gap-2 mb-2">
                   <Badge variant={
                       task.status === 'Completed' ? 'secondary' : 
@@ -221,7 +222,7 @@ export default function TaskDetailPage() {
                 <CardTitle className="font-headline text-2xl gradient-text">{task.title}</CardTitle>
                 <CardDescription>Created on {formatDate(task.createdAt)}</CardDescription>
               </div>
-               <div className="flex items-center gap-2 text-sm text-muted-foreground self-start md:self-center">
+               <div className="flex items-center flex-wrap gap-2 text-sm text-muted-foreground self-start shrink-0">
                   <div className="flex items-center gap-1.5">
                     <Calendar className="h-4 w-4" />
                     <span>{formatDate(task.deadline)}</span>
@@ -231,35 +232,35 @@ export default function TaskDetailPage() {
                     <span>{formatTime(task.deadline)}</span>
                   </div>
                   {isAssigner && (
-                    <>
-                    <Button asChild variant="outline" size="icon">
-                      <Link href={`/tasks/${task.id}/edit`}>
-                        <Edit className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="icon">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete the task
-                            and all its associated data.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleDeleteTask} disabled={isSubmitting}>
-                            {isSubmitting ? <Loader2 className="animate-spin" /> : "Delete"}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                    </>
+                    <div className="flex items-center gap-2">
+                      <Button asChild variant="outline" size="icon">
+                        <Link href={`/tasks/${task.id}/edit`}>
+                          <Edit className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="icon">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This action cannot be undone. This will permanently delete the task
+                              and all its associated data.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDeleteTask} disabled={isSubmitting}>
+                              {isSubmitting ? <Loader2 className="animate-spin" /> : "Delete"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   )}
                </div>
             </div>
@@ -488,3 +489,5 @@ function TaskDetailSkeleton() {
         </div>
     )
 }
+
+    

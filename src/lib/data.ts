@@ -78,6 +78,68 @@ export const getLoggedInUser = async (): Promise<User | null> => {
 // --- Task Functions (Firestore) ---
 const tasksCollection = collection(db, "tasks");
 
+const generateEmailTemplate = (assigneeName: string, assignerName: string, taskTitle: string, taskDeadline: string, taskId: string, action: 'assigned' | 'added') => {
+  const websiteUrl = 'https://netnex-internal-dashboard.vercel.app';
+  const taskUrl = `${websiteUrl}/tasks/${taskId}`;
+  const subject = action === 'assigned' ? `New Task Assigned: ${taskTitle}` : `You've been added to a task: ${taskTitle}`;
+  const headline = action === 'assigned' ? 'You have a new task!' : 'You\'ve been added to a task.';
+
+  return {
+    subject,
+    html: `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${subject}</title>
+          <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; margin: 0; padding: 0; background-color: #f4f4f7; }
+              .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+              .header { background-color: #2D29A1; color: #ffffff; padding: 24px; text-align: center; }
+              .header h1 { margin: 0; font-size: 24px; font-weight: 800; }
+              .content { padding: 32px; }
+              .content h2 { color: #1a202c; font-size: 20px; margin-top: 0; }
+              .content p { color: #4a5568; line-height: 1.6; }
+              .task-card { background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-top: 20px; }
+              .task-card strong { color: #2d3748; }
+              .button-container { text-align: center; margin-top: 24px; }
+              .button { background-color: #00D5FF; color: #1a202c; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block; }
+              .footer { background-color: #edf2f7; padding: 20px; text-align: center; font-size: 12px; color: #718096; }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <div class="header">
+                  <h1>Networking Nexus</h1>
+              </div>
+              <div class="content">
+                  <h2>${headline}</h2>
+                  <p>Hi ${assigneeName},</p>
+                  <p>A task has been ${action} to you by <strong>${assignerName}</strong>. Please review the details below.</p>
+                  
+                  <div class="task-card">
+                      <p><strong>Task:</strong> ${taskTitle}</p>
+                      <p><strong>Deadline:</strong> ${taskDeadline}</p>
+                  </div>
+
+                  <div class="button-container">
+                      <a href="${taskUrl}" class="button">View Task Details</a>
+                  </div>
+                  
+                  <p>If you have any questions, please comment on the task directly on the platform.</p>
+                  <p>Thank you!</p>
+              </div>
+              <div class="footer">
+                  © ${new Date().getFullYear()} Networking Nexus. All Rights Reserved.
+              </div>
+          </div>
+      </body>
+      </html>
+    `,
+  };
+};
+
 export const getTasks = async (user: User): Promise<Task[]> => {
   try {
     const snapshot = await getDocs(tasksCollection);
@@ -186,19 +248,15 @@ export const addTask = async (taskData: TaskData) => {
     for (const assignee of assignees) {
       if (!assignee) continue;
       try {
-          await sendEmail({
-            to: assignee.email,
-            subject: `New Task Assigned: ${taskData.title}`,
-            html: `
-              <h1>You have a new task</h1>
-              <p>Hi ${assignee.name.split(' ')[0]},</p>
-              <p>A new task, "<strong>${taskData.title}</strong>", has been assigned to you by ${user.name}.</p>
-              <p><strong>Deadline:</strong> ${taskData.deadline.toLocaleDateString()}</p>
-              <p>Please log in to the NetworkingNexus platform to view the details.</p>
-              <p>Thank you,</p>
-              <p>NetworkingNexus Team</p>
-            `,
-          });
+          const { subject, html } = generateEmailTemplate(
+            assignee.name.split(' ')[0],
+            user.name,
+            taskData.title,
+            taskData.deadline.toLocaleDateString(),
+            newTaskId,
+            'assigned'
+          );
+          await sendEmail({ to: assignee.email, subject, html });
       } catch (emailError) {
           console.error(`Failed to send email to ${assignee.email}:`, emailError);
       }
@@ -215,11 +273,39 @@ export const updateTask = async (taskId: string, data: Partial<Task>): Promise<T
     throw new Error("User not authenticated.");
   }
   const taskRef = doc(db, "tasks", taskId);
+  const originalTask = await getTask(taskId);
+
   await updateDoc(taskRef, data);
   const updatedTask = await getTask(taskId);
 
   if (updatedTask) {
     await createLog(user, 'updated', updatedTask);
+
+    // Check for new assignees to notify
+    if (originalTask && data.assigneeIds) {
+        const originalAssignees = new Set(originalTask.assigneeIds || []);
+        const newAssignees = data.assigneeIds.filter(id => !originalAssignees.has(id));
+
+        if (newAssignees.length > 0) {
+            const assigneeUsers = await Promise.all(newAssignees.map(id => getUser(id)));
+            for (const assignee of assigneeUsers) {
+                if (!assignee) continue;
+                try {
+                    const { subject, html } = generateEmailTemplate(
+                      assignee.name.split(' ')[0],
+                      user.name,
+                      updatedTask.title,
+                      new Date(updatedTask.deadline).toLocaleDateString(),
+                      updatedTask.id,
+                      'added'
+                    );
+                    await sendEmail({ to: assignee.email, subject, html });
+                } catch (emailError) {
+                    console.error(`Failed to send reassignment email to ${assignee.email}:`, emailError);
+                }
+            }
+        }
+    }
   }
   
   return updatedTask;
